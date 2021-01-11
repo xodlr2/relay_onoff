@@ -1,6 +1,7 @@
 #define SYS_LED   13
 #define TURN_ON   12
 #define TURN_OFF  11
+#define USB_DP_IN A0
 
 #define RELAY_ON  0
 #define RELAY_OFF  1
@@ -8,19 +9,26 @@
 #define BOOT_MODE 0
 #define TURN_ON_MODE 10
 #define TURN_OFF_MODE 20
+#define CALLBACK_MODE 50
 
-#define T_ON_AFTER_DELAY  59
-#define T_OFF_AFTER_DELAY 59
+#define T_ON_AFTER_DELAY  120 //sec
+#define T_OFF_AFTER_DELAY 20  //sec
 
+#define T_DP_HIGH_TIME  120
+#define N_DP_THRESH_HOLD 70
+
+void Main100mSec(void);
 void Main1Sec(void);
 void Timer_Int_flag(void);
 void timer_setup();
 
+unsigned char timer100mSecFalg = 0;
 unsigned char timer1SecFalg = 0;
 unsigned char sys_mode = 0;
 unsigned char sys_step = 0;
 unsigned int  sys_timer = 0;
-
+unsigned int cnt_log=0;
+unsigned int cnt_dplus_high=0;
 
 void setup() {
   // put your setup code here, to run once:
@@ -28,6 +36,7 @@ void setup() {
   pinMode(TURN_ON, OUTPUT);
   pinMode(TURN_OFF, OUTPUT);
   Serial.begin(9600); // serial communication for debug monitoring
+  Serial.println(" ");
   Serial.println("Program Start");
   timer_setup();
 }
@@ -37,7 +46,8 @@ void loop() {
   Timer_Int_flag();
   switch (sys_mode) {
   case BOOT_MODE :
-    Serial.println("boot mode");
+    Serial.println(" ");
+    Serial.println("BOOT_MODE");
     digitalWrite(TURN_ON, RELAY_OFF);
     digitalWrite(TURN_OFF, RELAY_OFF);
     sys_mode++;
@@ -46,7 +56,8 @@ void loop() {
     sys_mode = TURN_ON_MODE;
     break;
   case TURN_ON_MODE :
-    Serial.println("TURN_ON mode");
+    Serial.println(" ");
+    Serial.println("TURN_ON_MODE");
     sys_mode++;
     break;
   case TURN_ON_MODE+1 :
@@ -62,12 +73,16 @@ void loop() {
     }
     break;
   case TURN_ON_MODE+3 :
-    if(sys_timer>T_ON_AFTER_DELAY) {
+//    if(cnt_dplus_high >= T_DP_HIGH_TIME-1) {
+//      sys_mode = CALLBACK_MODE;
+//    }
+    if(sys_timer >= T_ON_AFTER_DELAY-1) {
       sys_mode = TURN_OFF_MODE;
     }
     break;
   case TURN_OFF_MODE :
-    Serial.println("TURN_OFF mode");
+    Serial.println(" ");
+    Serial.println("TURN_OFF_MODE");
     sys_mode++;
     break;
   case TURN_OFF_MODE+1 :
@@ -83,13 +98,40 @@ void loop() {
     }
     break;
   case TURN_OFF_MODE+3 :
-    if(sys_timer>T_ON_AFTER_DELAY) {
+    if(sys_timer>=T_OFF_AFTER_DELAY-1) {
       sys_mode = TURN_ON_MODE;
     }
     break;
+  case CALLBACK_MODE:
+  Serial.println(" ");
+    Serial.println("CALLBACK_MODE");
+    sys_mode++;
+    break;
+      case CALLBACK_MODE+1:
+      break;
   default :
     sys_mode = BOOT_MODE;
     break;
+  }
+}
+
+void Main100mSec(void)
+{
+  unsigned char cur=0;
+  if(sys_mode == TURN_ON_MODE+3) {
+    cur = analogRead(USB_DP_IN);
+    if(cur >= N_DP_THRESH_HOLD)  
+      cnt_dplus_high++;
+    else
+      cnt_dplus_high = 0;
+    Serial.print(cur);
+    cnt_log++;
+    if(cnt_log % 20 == 0) Serial.println(" ");
+    else  Serial.print("/");
+  }
+  else {
+   cnt_log =0;
+   cnt_dplus_high = 0;
   }
 }
 
@@ -97,9 +139,17 @@ void Main1Sec(void)
 {
   digitalWrite(SYS_LED, digitalRead(SYS_LED) ^ 1);
   sys_timer++;
+  Serial.print(sys_timer);
+  if(sys_timer % 10 == 0) Serial.println(" ");
+  else  Serial.print(",");
 }
 void Timer_Int_flag(void)
 {
+  if (timer100mSecFalg)
+  {
+    timer100mSecFalg = 0;
+    Main100mSec();
+  }
   if (timer1SecFalg)
   {
     timer1SecFalg = 0;
@@ -116,6 +166,7 @@ ISR(TIMER1_COMPA_vect) //, ISR_NOBLOCK)
     if (--ms100CntDown == 0)
     {
       ms100CntDown = 10;
+      timer100mSecFalg = 1;
       if (--Sec1CntDown == 0)
       {
         Sec1CntDown = 10;
