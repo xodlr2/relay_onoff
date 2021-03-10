@@ -1,23 +1,22 @@
-#define SYS_LED    13
-#define TURN_UP   11
-#define TURN_DN   12
-#define SENSOR_UP 7
-#define SENSOR_DN 8
+#define SYS_LED   13
+#define TURN_ON   12
+#define TURN_OFF  11
 
 #define RELAY_ON  0
 #define RELAY_OFF  1
 
 #define BOOT_MODE 0
-#define TURN_UP_MODE 10
-#define TURN_DN_MODE 20
+#define TURN_ON_MODE 10
+#define TURN_OFF_MODE 20
 #define INTERVAL_DELAY_MODE 50
 
-#define T_ON_TIME         500  //100msec unit
-#define T_ON_AFTER_DELAY  400  //100msec unit
-#define T_OFF_TIME        500  //100msec unit
-#define T_OFF_AFTER_DELAY 400  //100msec unit
+#define T_ON_TIME         10  //100msec unit
+#define T_ON_AFTER_DELAY  1800  //100msec unit
+#define T_OFF_TIME        10  //100msec unit
+#define T_OFF_AFTER_DELAY 300  //100msec unit
 #define T_INTERVAL_DELAY  0  //100msec unit
 
+#define SYNC_OP_SYS_TIMER	1
 #define SENSING_TRUE    0
 
 
@@ -31,35 +30,17 @@ uint8_t timer1SecFalg = 0;
 uint8_t sys_mode = 0;
 uint8_t sys_step = 0;
 uint16_t  op_timer = 0, sys_timer = 0;
-uint16_t  repeat=0;
+uint16_t  repeat = 0;
 
 void setup() {
   // put your setup code here, to run once:
   pinMode(SYS_LED, OUTPUT);
-  pinMode(TURN_UP, OUTPUT);
-  pinMode(TURN_DN, OUTPUT);
-
-  pinMode(SENSOR_UP, INPUT_PULLUP);
-  pinMode(SENSOR_DN, INPUT_PULLUP);
+  pinMode(TURN_ON, OUTPUT);
+  pinMode(TURN_OFF, OUTPUT);
 
   Serial.begin(9600); // serial communication for debug monitoring
   Serial.println("\nProgram Start");
   timer_setup();
-}
-void print_logs(uint8_t status) {
-  Serial.print("repeat = ");
-  Serial.print(repeat);
-  Serial.print(" times, diff time = ");
-  Serial.print(sys_timer/10);
-  Serial.print(".");
-  Serial.print(sys_timer%10);
-  Serial.print(" sec, ");
-  if (!status)  {
-    Serial.println("be touched while going up");
-  }
-  else {
-    Serial.println("be touched while going down");
-  }
 }
 
 void loop() {
@@ -69,61 +50,80 @@ void loop() {
 
     case BOOT_MODE :
       Serial.println("\nBOOT_MODE");
-      digitalWrite(TURN_UP, RELAY_OFF);
-      digitalWrite(TURN_DN, RELAY_OFF);
+      digitalWrite(TURN_ON, RELAY_OFF);
+      digitalWrite(TURN_OFF, RELAY_OFF);
       sys_mode++;
       break;
     case BOOT_MODE +1 :
-    repeat = 0;
-      sys_mode = TURN_UP_MODE;
+      repeat = 0;
+      sys_mode = TURN_ON_MODE;
       break;
 
-    case TURN_UP_MODE :
-//      Serial.println("\nTURN_UP");
-      digitalWrite(TURN_UP, RELAY_ON);
-      sys_timer = 0;
+    case TURN_ON_MODE :
+      Serial.println("\nTURN_ON");
+      digitalWrite(TURN_ON, RELAY_ON);
+      op_timer = 0;
+#if defined(SYNC_OP_SYS_TIMER)
+      sys_timer = op_timer;
+#endif
       sys_mode++;
       break;
-    case TURN_UP_MODE+1 :
-      if (sys_timer >= T_ON_TIME || digitalRead(SENSOR_UP) == SENSING_TRUE) {
-        digitalWrite(TURN_UP, RELAY_OFF);
-        print_logs(1);
-        sys_timer = 0;
+    case TURN_ON_MODE+1 :
+      if (op_timer >= T_ON_TIME) {
+        digitalWrite(TURN_ON, RELAY_OFF);
+        op_timer = 0;
+#if defined(SYNC_OP_SYS_TIMER)
+        sys_timer = op_timer;
+#endif
         sys_mode++;
       }
       break;
-    case TURN_UP_MODE+2 :
-      if (sys_timer >= T_ON_AFTER_DELAY) {
-        sys_timer = 0;
-        sys_mode = TURN_DN_MODE;
+    case TURN_ON_MODE+2 :
+      if (op_timer >= T_ON_AFTER_DELAY) {
+        op_timer = 0;
+#if defined(SYNC_OP_SYS_TIMER)
+        sys_timer = op_timer;
+#endif
+        sys_mode = TURN_OFF_MODE;
       }
       break;
 
-    case TURN_DN_MODE :
-//      Serial.println("\nTURN_DN");
-      digitalWrite(TURN_DN, RELAY_ON);
-      sys_timer = 0;
+    case TURN_OFF_MODE :
+      Serial.println("\nTURN_OFF");
+      digitalWrite(TURN_OFF, RELAY_ON);
+      op_timer = 0;
+#if defined(SYNC_OP_SYS_TIMER)
+      sys_timer = op_timer;
+#endif
       sys_mode++;
-    case TURN_DN_MODE+1 :
-      if (sys_timer >= T_OFF_TIME || digitalRead(SENSOR_DN) == SENSING_TRUE) {
-        digitalWrite(TURN_DN, RELAY_OFF);
-        print_logs(0);
-        sys_timer = 0;
+    case TURN_OFF_MODE+1 :
+      if (op_timer >= T_OFF_TIME) {
+        digitalWrite(TURN_OFF, RELAY_OFF);
+        op_timer = 0;
+#if defined(SYNC_OP_SYS_TIMER)
+        sys_timer = op_timer;
+#endif
         sys_mode++;
       }
       break;
-    case TURN_DN_MODE+2 :
-      if (sys_timer >= T_OFF_AFTER_DELAY) {
-        sys_timer = 0;
+    case TURN_OFF_MODE+2 :
+      if (op_timer >= T_OFF_AFTER_DELAY) {
+        op_timer = 0;
+#if defined(SYNC_OP_SYS_TIMER)
+        sys_timer = op_timer;
+#endif
         sys_mode = INTERVAL_DELAY_MODE;
       }
       break;
 
     case INTERVAL_DELAY_MODE :
-      if (sys_timer >= T_INTERVAL_DELAY) {
+      if (op_timer >= T_INTERVAL_DELAY) {
         repeat++;
-        sys_timer = 0;
-        sys_mode = TURN_UP_MODE;
+        op_timer = 0;
+#if defined(SYNC_OP_SYS_TIMER)
+        sys_timer = op_timer;
+#endif
+        sys_mode = TURN_ON_MODE;
       }
       break;
 
@@ -135,13 +135,16 @@ void loop() {
 
 void Main100mSec(void)
 {
-  sys_timer++;
   op_timer++;
 }
 
 void Main1Sec(void)
 {
   digitalWrite(SYS_LED, digitalRead(SYS_LED) ^ 1);
+  sys_timer++;
+  Serial.print(sys_timer);
+  if (sys_timer % 10 == 0) Serial.println(" ");
+  else  Serial.print(",");
 }
 
 void Timer_Int_flag(void)
